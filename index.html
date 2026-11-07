@@ -19,16 +19,91 @@
   @media (prefers-color-scheme: dark) {
     html, body, iframe { background: #0D1410; }
   }
+  #pdf { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .45); font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  #pdf[hidden] { display: none; }
+  #pdf .caixa { box-sizing: border-box; width: min(420px, 100%); padding: 24px; border-radius: 16px; background: #00632B; color: #fff; }
+  #pdf h1 { margin: 0 0 8px; font-size: 22px; }
+  #pdf p { margin: 0 0 20px; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+  #pdf button { display: block; box-sizing: border-box; width: 100%; min-height: 48px; margin-top: 10px; border: 2px solid #fff; border-radius: 12px; background: transparent; color: #fff; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+  #pdf button.principal { background: #fff; color: #00632B; }
 </style>
 </head>
 <body>
 <iframe id="painel" title="Zayda Painel"></iframe>
+<div id="pdf" role="dialog" aria-modal="true" aria-labelledby="pdfTitulo" hidden>
+  <div class="caixa">
+    <h1 id="pdfTitulo">PDF pronto</h1>
+    <p id="pdfNome"></p>
+    <button type="button" class="principal" id="pdfAbrir">Imprimir / Compartilhar</button>
+    <button type="button" id="pdfFechar">Fechar</button>
+  </div>
+</div>
 <script>
+  const VERSAO_ENTRADA = '1';
   const EXEC = 'https://script.google.com/macros/s/AKfycbzUpcNapacbnO9G2Xt7aMpGInxifPbBQEM7ZokFWQ4Odv5xb4AGvxZ2CzyIEaBq8ODV/exec';
   const parametros = location.search.slice(1);
   document.getElementById('painel').src = EXEC + '?app=1' + (parametros ? '&' + parametros : '');
+
+  const quadroPdf = document.getElementById('pdf');
+  let arquivoPdf = null;
+  let urlPdf = null;
+
+  function fecharPdf() {
+    quadroPdf.hidden = true;
+    if (urlPdf) URL.revokeObjectURL(urlPdf);
+    urlPdf = null;
+    arquivoPdf = null;
+  }
+  function abrirPdfEmAba() {
+    if (!arquivoPdf) return;
+    if (!urlPdf) urlPdf = URL.createObjectURL(arquivoPdf);
+    window.open(urlPdf, '_blank');
+  }
+  function mostrarPdf(nome, dados) {
+    fecharPdf();
+    arquivoPdf = new File([dados], nome, { type: 'application/pdf' });
+    document.getElementById('pdfNome').textContent = nome;
+    quadroPdf.hidden = false;
+  }
+  document.getElementById('pdfFechar').addEventListener('click', fecharPdf);
+  document.getElementById('pdfAbrir').addEventListener('click', function () {
+    if (!arquivoPdf) return;
+    if (navigator.canShare && navigator.canShare({ files: [arquivoPdf] })) {
+      navigator.share({ files: [arquivoPdf], title: arquivoPdf.name }).catch(function (erro) {
+        if (!erro || erro.name !== 'AbortError') abrirPdfEmAba();
+      });
+    } else {
+      abrirPdfEmAba();
+    }
+  });
+
+  function origemValida(origem) {
+    return origem === 'https://script.google.com' || origem.endsWith('.googleusercontent.com');
+  }
   window.addEventListener('message', function (e) {
-    if (e.data && e.data.zayda === 'recarregar') location.reload();
+    if (!origemValida(e.origin) || !e.data) return;
+    if (e.data.zayda === 'recarregar') location.reload();
+    if (e.data.zayda === 'pdf' && e.data.dados instanceof ArrayBuffer) mostrarPdf(String(e.data.nome || 'Zayda.pdf'), e.data.dados);
+  });
+
+  // Página de entrada se atualiza sozinha: no máximo uma recarga a cada 60 segundos.
+  function verificarEntrada() {
+    fetch('./versao.txt?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (texto) {
+        const versao = texto.trim();
+        if (!/^\d+$/.test(versao) || versao === VERSAO_ENTRADA || !quadroPdf.hidden) return;
+        try {
+          if (Date.now() - Number(localStorage.getItem('zayda_recarga') || 0) < 60000) return;
+          localStorage.setItem('zayda_recarga', String(Date.now()));
+        } catch (erro) { return; } // sem como contar as recargas, não arrisca repetir sem parar
+        location.reload();
+      })
+      .catch(function () {});
+  }
+  verificarEntrada();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') verificarEntrada();
   });
 </script>
 </body>
