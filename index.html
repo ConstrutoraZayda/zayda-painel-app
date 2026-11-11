@@ -39,10 +39,13 @@
   </div>
 </div>
 <script>
-  const VERSAO_ENTRADA = '1';
+  const VERSAO_ENTRADA = '2';
   const EXEC = 'https://script.google.com/macros/s/AKfycbzUpcNapacbnO9G2Xt7aMpGInxifPbBQEM7ZokFWQ4Odv5xb4AGvxZ2CzyIEaBq8ODV/exec';
   const parametros = location.search.slice(1);
-  document.getElementById('painel').src = EXEC + '?app=1' + (parametros ? '&' + parametros : '');
+  // Chave do aparelho guardada aqui (o painel manda ao entrar): vai no endereço para entrar direto no app.
+  let tokenSalvo = '';
+  try { tokenSalvo = localStorage.getItem('zayda_token') || ''; } catch (erro) {}
+  document.getElementById('painel').src = EXEC + '?app=1' + (parametros ? '&' + parametros : '') + (tokenSalvo ? '&t=' + encodeURIComponent(tokenSalvo) : '');
 
   const quadroPdf = document.getElementById('pdf');
   let arquivoPdf = null;
@@ -83,6 +86,8 @@
   window.addEventListener('message', function (e) {
     if (!origemValida(e.origin) || !e.data) return;
     if (e.data.zayda === 'recarregar') location.reload();
+    if (e.data.zayda === 'token' && typeof e.data.token === 'string') { try { localStorage.setItem('zayda_token', e.data.token); } catch (erro) {} }
+    if (e.data.zayda === 'sair') { try { localStorage.removeItem('zayda_token'); } catch (erro) {} }
     if (e.data.zayda === 'pdf' && e.data.dados instanceof ArrayBuffer) mostrarPdf(String(e.data.nome || 'Zayda.pdf'), e.data.dados);
   });
 
